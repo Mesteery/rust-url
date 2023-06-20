@@ -2419,7 +2419,6 @@ impl Url {
     /// # run().unwrap();
     /// # }
     /// ```
-    #[cfg(any(unix, windows, target_os = "redox", target_os = "wasi"))]
     #[allow(clippy::result_unit_err)]
     pub fn from_file_path<P: AsRef<Path>>(path: P) -> Result<Url, ()> {
         let mut serialization = "file://".to_owned();
@@ -2456,7 +2455,6 @@ impl Url {
     ///
     /// Note that `std::path` does not consider trailing slashes significant
     /// and usually does not include them (e.g. in `Path::parent()`).
-    #[cfg(any(unix, windows, target_os = "redox", target_os = "wasi"))]
     #[allow(clippy::result_unit_err)]
     pub fn from_directory_path<P: AsRef<Path>>(path: P) -> Result<Url, ()> {
         let mut url = Url::from_file_path(path)?;
@@ -2573,7 +2571,6 @@ impl Url {
     /// (That is, if the percent-decoded path contains a NUL byte or,
     /// for a Windows path, is not UTF-8.)
     #[inline]
-    #[cfg(any(unix, windows, target_os = "redox", target_os = "wasi"))]
     #[allow(clippy::result_unit_err)]
     pub fn to_file_path(&self) -> Result<PathBuf, ()> {
         if let Some(segments) = self.path_segments() {
@@ -2777,7 +2774,7 @@ impl<'de> serde::Deserialize<'de> for Url {
     }
 }
 
-#[cfg(any(unix, target_os = "redox", target_os = "wasi"))]
+#[cfg(not(windows))]
 fn path_to_file_url_segments(
     path: &Path,
     serialization: &mut String,
@@ -2796,7 +2793,10 @@ fn path_to_file_url_segments(
         empty = false;
         serialization.push('/');
         serialization.extend(percent_encode(
+            #[cfg(any(unix, target_os = "redox", target_os = "wasi"))]
             component.as_os_str().as_bytes(),
+            #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+            component.as_os_str().to_string_lossy().borrow().as_bytes(),
             PATH_SEGMENT,
         ));
     }
@@ -2879,11 +2879,12 @@ fn path_to_file_url_segments_windows(
     Ok((host_end, host_internal))
 }
 
-#[cfg(any(unix, target_os = "redox", target_os = "wasi"))]
+#[cfg(not(windows))]
 fn file_url_segments_to_pathbuf(
     host: Option<&str>,
     segments: str::Split<'_, char>,
 ) -> Result<PathBuf, ()> {
+    #[cfg(any(unix, target_os = "redox", target_os = "wasi"))]
     use std::ffi::OsStr;
     #[cfg(any(unix, target_os = "redox"))]
     use std::os::unix::prelude::OsStrExt;
@@ -2912,7 +2913,9 @@ fn file_url_segments_to_pathbuf(
     {
         bytes.push(b'/');
     }
-
+    #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+    let os_str = String::from_utf8(bytes).or(())?;
+    #[cfg(any(unix, target_os = "redox", target_os = "wasi"))]
     let os_str = OsStr::from_bytes(&bytes);
     let path = PathBuf::from(os_str);
 
